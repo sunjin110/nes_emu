@@ -4,9 +4,9 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
 
 # plan
 
-- [ ] *.nesを読んで解析、各ROMを切り出しする
+- [x] *.nesを読んで解析、各ROMを切り出しする
 -> https://qiita.com/bokuweb/items/1575337bef44ae82f4d3 hello worldする
-- [ ] RAMの実装 : 参考: <a harf="https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=35">Example</a>
+- [ ] RAMの実装 : 参考: https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=35"
 - [ ] CPUがSRAMの情報を取得できる様にする https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=38
 - 
 
