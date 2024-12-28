@@ -25,10 +25,10 @@ type Cartridge struct {
 
 func NewCartridge(data []byte) (*Cartridge, error) {
 	if string(data[0:3]) != "NES" {
-		return nil, errors.New("invalid header 0~3")
+		return nil, errors.New("Cartridge: invalid header 0~3")
 	}
 	if data[3] != 0x1A {
-		return nil, errors.New("invalid header 3")
+		return nil, errors.New("Cartridge: invalid header 3")
 	}
 
 	// PRG-ROM
@@ -37,7 +37,7 @@ func NewCartridge(data []byte) (*Cartridge, error) {
 	prgEnd := prgStart + prgBankCount*prgBankSize
 
 	if prgEnd > len(data) {
-		return nil, errors.New("ROM size is too short to contain full RPG-ROM")
+		return nil, errors.New("Cartridge: ROM size is too short to contain full RPG-ROM")
 	}
 	prgData := data[prgStart:prgEnd]
 
@@ -46,7 +46,7 @@ func NewCartridge(data []byte) (*Cartridge, error) {
 	chrStart := prgEnd
 	chrEnd := chrStart + chrBankCount*chrBankSize
 	if chrEnd > len(data) {
-		return nil, errors.New("ROM size is too chort to contain full CHR-ROM")
+		return nil, errors.New("Cartridge: ROM size is too chort to contain full CHR-ROM")
 	}
 	chrData := data[chrStart:chrEnd]
 
@@ -83,7 +83,7 @@ func (cartridge *Cartridge) ReadPRG(offset, size int) ([]byte, error) {
 
 func (cartridge *Cartridge) WritePRG(data []byte, offset int) error {
 	if offset+len(data) > len(cartridge.PRG) {
-		return fmt.Errorf("offset+size is too large to write PRG. offset: %d, size: %d, prgSize: %d", offset, len(data), len(cartridge.PRG))
+		return fmt.Errorf("Cartridge: offset+size is too large to write PRG. offset: %d, size: %d, prgSize: %d", offset, len(data), len(cartridge.PRG))
 	}
 	copy(cartridge.PRG[offset:], data)
 	return nil
@@ -99,7 +99,7 @@ func (cartridge *Cartridge) ReadCHR(offset, size int) ([]byte, error) {
 	for i := 0; i < size; i++ {
 		idx := offset + i
 		if idx >= len(cartridge.CHR) {
-			logger.Logger.Warn("ReadCHR: didn't expect mirroring")
+			logger.Logger.Warn("Cartridge: ReadCHR: didn't expect mirroring")
 			idx = idx % len(cartridge.CHR)
 		}
 		data[i] = cartridge.CHR[idx]
