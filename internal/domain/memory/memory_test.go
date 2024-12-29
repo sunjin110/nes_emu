@@ -12,7 +12,7 @@ func TestMemory_ReadWrite(t *testing.T) {
 	// メモリの初期化
 	prgRom := [prgrom.PRGROMSize]byte{}
 	prgRom[0] = 0x99
-	mem := memory.NewMemory(*prgrom.NewPRGROM(prgRom))
+	mem := memory.NewMemory(prgrom.NewFixedPRGROM(prgRom))
 
 	// RAMの書き込みと読み込み
 	addrRAM := uint16(0x0000)
@@ -60,7 +60,7 @@ func TestMemory_ReadWrite(t *testing.T) {
 
 func TestMemory_InvalidAddress(t *testing.T) {
 	// メモリの初期化
-	mem := memory.NewMemory(*prgrom.NewPRGROM([32 * 1024]byte{}))
+	mem := memory.NewMemory(prgrom.NewFixedPRGROM([32 * 1024]byte{}))
 
 	// 無効なアドレスの読み込み
 	invalidAddr := uint16(0x8000 - 1)
