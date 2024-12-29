@@ -10,6 +10,19 @@ type CPU struct {
 	register Register
 }
 
+// Run CPUの1サイクルの実行
+// clockCount: PPUやAPUとの同期のため、実行時間にかかった実行クロック数を返す
+func (cpu *CPU) Run() (clockCount uint8, err error) {
+	// TODO PCの中を除いて、次に何を実行するかを確認する
+	// TODO get opcode
+	return
+}
+
+func (cpu *CPU) Interrupt() error {
+	// 割り込み処理
+	return nil
+}
+
 /**
 # cpu実行順序
 ## fetch
