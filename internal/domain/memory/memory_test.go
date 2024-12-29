@@ -5,13 +5,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/sunjin110/nes_emu/internal/domain/memory"
+	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
 )
 
 func TestMemory_ReadWrite(t *testing.T) {
 	// メモリの初期化
-	prgRom := [memory.PRGROMSize]byte{}
+	prgRom := [prgrom.PRGROMSize]byte{}
 	prgRom[0] = 0x99
-	mem := memory.NewMemory(prgRom)
+	mem := memory.NewMemory(*prgrom.NewPRGROM(prgRom))
 
 	// RAMの書き込みと読み込み
 	addrRAM := uint16(0x0000)
@@ -59,7 +60,7 @@ func TestMemory_ReadWrite(t *testing.T) {
 
 func TestMemory_InvalidAddress(t *testing.T) {
 	// メモリの初期化
-	mem := memory.NewMemory([memory.PRGROMSize]byte{})
+	mem := memory.NewMemory(*prgrom.NewPRGROM([32 * 1024]byte{}))
 
 	// 無効なアドレスの読み込み
 	invalidAddr := uint16(0x8000 - 1)

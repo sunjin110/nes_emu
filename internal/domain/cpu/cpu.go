@@ -1,6 +1,11 @@
 package cpu
 
-import "github.com/sunjin110/nes_emu/internal/domain/memory"
+import (
+	"fmt"
+
+	"github.com/sunjin110/nes_emu/internal/domain/memory"
+	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
+)
 
 const memorySize = 16 * 1024 // 16KB
 
@@ -8,6 +13,18 @@ const memorySize = 16 * 1024 // 16KB
 type CPU struct {
 	memory   memory.Memory
 	register Register
+}
+
+func NewCPU(memory memory.Memory, prgROM prgrom.PRGROM) (*CPU, error) {
+	register, err := NewRegister(prgROM)
+	if err != nil {
+		return nil, fmt.Errorf("failed new register. err: %w", err)
+	}
+
+	return &CPU{
+		memory:   memory,
+		register: *register,
+	}, nil
 }
 
 // Run CPUの1サイクルの実行
@@ -21,6 +38,14 @@ func (cpu *CPU) Run() (clockCount uint8, err error) {
 func (cpu *CPU) Interrupt() error {
 	// 割り込み処理
 	return nil
+}
+
+// fetchOpcode PCから実行コードを取得する
+func (cpu *CPU) fetchOpcode() (Opcode, error) {
+
+	// cpu.register.pc
+
+	return Opcode{}, nil
 }
 
 /**
