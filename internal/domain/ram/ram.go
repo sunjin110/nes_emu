@@ -5,6 +5,11 @@ package ram
 // 0x0800〜0x1FFF: 内蔵RAMのミラーリング領域（ハードウェアでミラーリング）
 // Sample RAM map: https://www.nesdev.org/wiki/Sample_RAM_map
 
+// 0x0100 ~ 0x01FFはスタックに割り当てられる
+// 多くのゲームではSPの初期値として0x1FFを指定する
+// pushした時に、追加してSPをdecrement
+// popした時に、取り出してSPをincrement
+
 const (
 	ramSize = 2 * 1024 // 2KB
 )
@@ -19,10 +24,10 @@ func NewRAM() *RAM {
 	}
 }
 
-func (ram *RAM) Read(offset int) byte {
+func (ram *RAM) Read(offset uint16) byte {
 	return ram.data[offset%ramSize]
 }
 
-func (ram *RAM) Write(offset int, data byte) {
+func (ram *RAM) Write(offset uint16, data byte) {
 	ram.data[offset%ramSize] = data
 }
