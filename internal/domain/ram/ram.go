@@ -14,6 +14,12 @@ const (
 	ramSize = 2 * 1024 // 2KB
 )
 
+const (
+	addrRAMStart       = 0x0000
+	addrRAMMirrorStart = 0x0800
+	addrRAMEnd         = 0x1FFF
+)
+
 type RAM struct {
 	data [ramSize]byte
 }
@@ -30,4 +36,8 @@ func (ram *RAM) Read(offset uint16) byte {
 
 func (ram *RAM) Write(offset uint16, data byte) {
 	ram.data[offset%ramSize] = data
+}
+
+func IsRAMRange(addr uint16) bool {
+	return addr >= addrRAMStart && addr <= addrRAMEnd
 }
