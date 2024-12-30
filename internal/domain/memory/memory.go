@@ -64,3 +64,7 @@ func (memory *Memory) Write(addr uint16, value byte) error {
 	}
 	return nil
 }
+
+func (memory *Memory) GetPRGROM() prgrom.PRGROM {
+	return memory.prgROM
+}
