@@ -30,8 +30,18 @@ func NewCPU(memory memory.Memory, prgROM prgrom.PRGROM) (*CPU, error) {
 // Run CPUの1サイクルの実行
 // clockCount: PPUやAPUとの同期のため、実行時間にかかった実行クロック数を返す
 func (cpu *CPU) Run() (clockCount uint8, err error) {
-	// TODO PCの中を除いて、次に何を実行するかを確認する
-	// TODO get opcode
+	opcode, err := cpu.fetchOpcode()
+	if err != nil {
+		return 0, fmt.Errorf("failed fetchOpcode. err: %w", err)
+	}
+	// TODO fetchOperand
+
+	// TODO: opcodeのmnemonicの挙動を実装する
+	switch opcode.Mnemonic {
+	case ADC:
+		cpu.adc(0) // TODO
+	}
+
 	return
 }
 
@@ -40,12 +50,91 @@ func (cpu *CPU) Interrupt() error {
 	return nil
 }
 
+func (cpu *CPU) Reset() error {
+	r, err := NewRegister(cpu.memory.GetPRGROM())
+	if err != nil {
+		return fmt.Errorf("CPU: failed reset. err: %w", err)
+	}
+	cpu.register = *r
+	return nil
+}
+
 // fetchOpcode PCから実行コードを取得する
 func (cpu *CPU) fetchOpcode() (Opcode, error) {
+	pc := cpu.register.pc
+	opcodeByte, err := cpu.memory.Read(pc)
+	if err != nil {
+		return Opcode{}, fmt.Errorf("CPU: fialed read memory. addr: %x, err: %w", pc, err)
+	}
+	opcode, ok := Opcodes[opcodeByte]
+	if !ok {
+		return Opcode{}, fmt.Errorf("CPU: undefined opcode. opcodeByte: %x", opcodeByte)
+	}
+	return opcode, nil
+}
 
-	// cpu.register.pc
+func (cpu *CPU) fetchOperand(addressingMode AddressingMode) byte {
+	// fetchOperandの実装イメージ
+	// switch addressingMode {
+	// case "Immediate":
+	// 	// 即値: PCが指すアドレスの次のバイト
+	// 	operand := cpu.Memory.Read(cpu.PC)
+	// 	cpu.PC++ // PCを進める
+	// 	return operand
 
-	return Opcode{}, nil
+	// case "Absolute":
+	// 	// 絶対アドレッシング: 次の2バイトがアドレスを示す
+	// 	low := cpu.Memory.Read(cpu.PC)
+	// 	high := cpu.Memory.Read(cpu.PC + 1)
+	// 	address := uint16(high)<<8 | uint16(low)
+	// 	cpu.PC += 2 // PCを2バイト進める
+	// 	return cpu.Memory.Read(address)
+
+	// // 他のアドレッシングモードも実装
+	// default:
+	// 	panic("Unknown addressing mode")
+	// }
+	panic("todo")
+}
+
+// 加算処理
+func (cpu *CPU) adc(operand byte) {
+	// 8bit以上の計算ができるように
+	var carry byte
+	if cpu.getFlag(carryFlag) {
+		carry = 1
+	}
+
+	// 16ビットで計算してキャリーを考慮
+	result := uint16(cpu.register.a) + uint16(operand) + uint16(carry)
+
+	// キャリーフラグの更新
+	cpu.setFlag(carryFlag, result > 0xFF)
+
+	// 結果を8ビットに収める
+	cpu.register.a = byte(result & 0xFF)
+
+	// ゼロフラグ
+	cpu.setFlag(zeroFlag, cpu.register.a == 0)
+
+	// ネガティブフラグの更新
+	cpu.setFlag(negativeFlag, cpu.register.a&0x80 != 0)
+}
+
+func (cpu *CPU) setFlag(flag statusFlag, value bool) {
+	if value {
+		cpu.register.p |= flag.toByte() // OR
+	} else {
+		cpu.register.p &^= flag.toByte() // AND NOT
+	}
+}
+
+func (cpu *CPU) getFlag(flag statusFlag) bool {
+	return cpu.register.p&flag.toByte() != 0
+}
+
+func (cpu *CPU) incrementPC(count uint16) {
+	cpu.register.pc += count
 }
 
 /**

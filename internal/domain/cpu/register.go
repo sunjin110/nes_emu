@@ -27,5 +27,21 @@ func NewRegister(prgROM prgrom.PRGROM) (*Register, error) {
 	}, nil
 }
 
+type statusFlag byte
+
+const (
+	carryFlag     statusFlag = 1 << 0 // キャリーフラグ
+	zeroFlag      statusFlag = 1 << 1
+	interruptFlag statusFlag = 1 << 2
+	decimalFlag   statusFlag = 1 << 3 // NESでは無効
+	breakFlag     statusFlag = 1 << 4
+	overflawFlag  statusFlag = 1 << 6
+	negativeFlag  statusFlag = 1 << 7
+)
+
+func (sf statusFlag) toByte() byte {
+	return byte(sf)
+}
+
 // TODO ステータスレジスタの更新と読み取り
 // file:///Users/sunjin/Downloads/LayerWalker.pdf

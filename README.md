@@ -10,6 +10,8 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
 - [x] PRG-ROMからPCを取得
 - [x] cpu register
 - [ ] CPU run
+    - [x] ADCの実装
+    - [ ] fetchOperandの実装
 - [ ] CPUがSRAMの情報を取得できる様にする https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=38
 - 
 
