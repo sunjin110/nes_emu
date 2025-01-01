@@ -44,6 +44,12 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.and(opcode)
 	case ASL:
 		cycles, err = cpu.asl(opcode)
+	case BCC:
+		cycles, err = cpu.bcc(opcode)
+	case BCS:
+		cycles, err = cpu.bcs(opcode)
+	case BEQ:
+		cycles, err = cpu.beq(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -452,6 +458,28 @@ func (cpu *CPU) bcs(opcode Opcode) (cycles uint8, err error) {
 	// 分岐成立時に+1する
 	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
 	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// beq
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BEQ
+// PC = PC + 2 + memory (signed)
+func (cpu *CPU) beq(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BEQ {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if !cpu.getFlag(zeroFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: beq: failed fetchAddr. err: %w", err)
+	}
+
+	cpu.setPC(addr)
 	return opcode.Cycles + additionalCycles + 1, nil
 }
 
