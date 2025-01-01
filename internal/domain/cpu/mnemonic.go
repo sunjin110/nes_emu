@@ -30,6 +30,11 @@ const (
 	EOR                 // AレジスタとEX-OR演算をする
 	ORA                 // AレジスタとOR演算をする
 	BIT                 // AレジスタとAND比較をする
+	BMI                 // TODO
+	BNE                 // TODO
+	BPL                 // TODO
+	BVC                 // TODO
+	BVS                 // TODO
 	ASL                 // 左シフト
 	LSR                 // 右シフト
 	ROL                 // 左ローテイト

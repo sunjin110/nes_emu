@@ -1,6 +1,10 @@
 package cpu
 
-type IterruptType int
+type InterruptType int
 
-// TODO interruptType
-const ()
+const (
+	InterruptTypeBRK InterruptType = iota
+	InterruptTypeNMI
+	InterruptTypeReset
+	InterruptTypeIRQ
+)
