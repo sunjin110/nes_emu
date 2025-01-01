@@ -1,5 +1,7 @@
 package prgrom
 
+import "github.com/sunjin110/nes_emu/pkg/bit_helper"
+
 const (
 	PRGROMSize = 32 * 1024 // 32KB
 
@@ -28,7 +30,7 @@ func (rom *FixedPRGROM) InitPC() uint16 {
 	// https://www.pagetable.com/?p=410
 	pcLower := rom.data[rom.relativeAddr(0xFFFC)]
 	pcUpper := rom.data[rom.relativeAddr(0xFFFD)]
-	pc := uint16(pcLower) | (uint16(pcUpper) << 8)
+	pc := bit_helper.BytesToUint16(pcLower, pcUpper)
 	return pc
 }
 

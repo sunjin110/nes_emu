@@ -1,10 +1,12 @@
 package cpu
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sunjin110/nes_emu/internal/domain/memory"
 	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
+	"github.com/sunjin110/nes_emu/pkg/bit_helper"
 )
 
 const memorySize = 16 * 1024 // 16KB
@@ -36,11 +38,16 @@ func (cpu *CPU) Run() (clockCount uint8, err error) {
 	}
 	// TODO fetchOperand
 
+	var additionalCycle uint16
+
 	// TODO: opcodeのmnemonicの挙動を実装する
 	switch opcode.Mnemonic {
 	case ADC:
 		cpu.adc(0) // TODO
 	}
+
+	// TODO count up PC
+	cpu.incrementPC(uint16(opcode.Cycles) + additionalCycle)
 
 	return
 }
@@ -73,28 +80,223 @@ func (cpu *CPU) fetchOpcode() (Opcode, error) {
 	return opcode, nil
 }
 
-func (cpu *CPU) fetchOperand(addressingMode AddressingMode) byte {
-	// fetchOperandの実装イメージ
-	// switch addressingMode {
-	// case "Immediate":
-	// 	// 即値: PCが指すアドレスの次のバイト
-	// 	operand := cpu.Memory.Read(cpu.PC)
-	// 	cpu.PC++ // PCを進める
-	// 	return operand
+// fetchArg 引数を取得する
+// additionalCycle: IndirectY, Relative, AbsoluteX, AbsoluteYで追加cycleが発生する可能性があるため
+func (cpu *CPU) fetchArg(mode AddressingMode) (value byte, additionalCycle uint8, err error) {
+	switch mode {
+	case Implied:
+		return 0, 0, errors.New("featchArg: Implied dose not have an arg")
+	case Accumulator:
+		return cpu.register.a, 0, nil
+	case Immediate:
+		value, err = cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchArg: Immediate failed get memory value. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		return value, 0, nil
+	default:
+		addr, additionalCycle, err := cpu.fetchAddr(mode)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchArg: failed fetchAddr. mode: %d, err: %w", mode, err)
+		}
+		value, err = cpu.memory.Read(addr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchArg: failed get memory value. mode: %d, addr: %x, err: %w", mode, addr, err)
+		}
+		return value, additionalCycle, nil
+	}
+}
 
-	// case "Absolute":
-	// 	// 絶対アドレッシング: 次の2バイトがアドレスを示す
-	// 	low := cpu.Memory.Read(cpu.PC)
-	// 	high := cpu.Memory.Read(cpu.PC + 1)
-	// 	address := uint16(high)<<8 | uint16(low)
-	// 	cpu.PC += 2 // PCを2バイト進める
-	// 	return cpu.Memory.Read(address)
+// fetchArg アドレスを取得する
+// additionalCycle: IndirectY, Relative, AbsoluteX, AbsoluteYで追加cycleが発生する可能性があるため
+func (cpu *CPU) fetchAddr(mode AddressingMode) (addr uint16, additionalCycle uint8, err error) {
 
-	// // 他のアドレッシングモードも実装
-	// default:
-	// 	panic("Unknown addressing mode")
-	// }
-	panic("todo")
+	switch mode {
+	case Absolute:
+		lower, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Absolute: failed read lower part. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		upper, err := cpu.memory.Read(cpu.register.pc + 2)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Absolute: failed read upper part. addr: %x, err: %w", cpu.register.pc+2, err)
+		}
+		addr = bit_helper.BytesToUint16(lower, upper)
+		return addr, 0, nil
+	case Zeropage:
+		addrUint8, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Zeropage: failed read addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		return uint16(addrUint8), 0, nil
+	case ZeropageX:
+		addrUint8, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: ZeropageX: failed read addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		addrUint8 += cpu.register.x
+		return uint16(addrUint8), 0, nil
+	case ZeropageY:
+		addrUint8, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: ZeropageY: failed read addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		addrUint8 += cpu.register.y
+		return uint16(addrUint8), 0, nil
+	case AbsoluteX:
+		lower, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: AbsoluteX: failed read lower. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+
+		upper, err := cpu.memory.Read(cpu.register.pc + 2)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: AbsoluteX: failed read upper. addr: %x, err: %w", cpu.register.pc+2, err)
+		}
+
+		addr := bit_helper.BytesToUint16(lower, upper)
+		beforeAddr := addr
+		addr += uint16(cpu.register.x)
+
+		// ページ境界クロスチェック
+		// ページ境界を跨いだ場合は、cycle数を+1する
+		if (beforeAddr & 0xFF00) != (addr & 0xFF00) {
+			additionalCycle = 1
+		}
+		return addr, additionalCycle, nil
+	case AbsoluteY:
+		lower, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: AbsoluteY: failed read lower. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+
+		upper, err := cpu.memory.Read(cpu.register.pc + 2)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: AbsoluteY: failed read upper. addr: %x, err: %w", cpu.register.pc+2, err)
+		}
+
+		addr := bit_helper.BytesToUint16(lower, upper)
+		beforeAddr := addr
+		addr += uint16(cpu.register.y)
+
+		// ページ境界クロスチェック
+		// ページ境界を跨いだ場合は、cycle数を+1する
+		if (beforeAddr & 0xFF00) != (addr & 0xFF00) {
+			additionalCycle = 1
+		}
+		return addr, additionalCycle, nil
+	case Relative:
+		// if文後のジャンプ先のPCを計算するときに利用する
+		offset, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("featchAddr: Relative: failed read offset. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+
+		// 符号付き解釈になるように先にint8にする
+		signedOffset := int8(offset)
+
+		// 次に実行される予定のPCを符号付きで取得する
+		signedPC := int32(cpu.register.pc) + 2
+
+		// ジャンプ先のPCを計算する
+		signedAddr := signedPC + int32(signedOffset)
+		if signedAddr < 0 || signedAddr > 0xFFFF {
+			return 0, 0, fmt.Errorf("fetchAddr: Relative: Invalid addr. sighendAddr: %x, signedPC: %x, signedOffset: %x", signedAddr, signedPC, signedOffset)
+		}
+
+		addr := uint16(signedAddr)
+
+		// ページ境界クロスチェック
+		// ページ境界を跨いだ場合は、cycle数を+1する
+		// ページクロスで +1 クロック、Relative はブランチ命令で使われるが、ブランチ成立時にはさらに +1 されることに注意する
+		// ここでページ境界のクロスをチェックするのに signedPC を使用している理由は、相対アドレッシングにおけるページ境界の比較基準が 次に実行される予定のPC（PC + 2） だからです。
+		if (uint16(signedPC) & 0xFF00) != (addr & 0xFF00) {
+			additionalCycle = 1
+		}
+		return addr, additionalCycle, nil
+	case IndirectX:
+		// *(lower + X)
+		indirectLower, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("featchAddr: IndirectX: failed read offset. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+
+		lowerAddr := uint16(indirectLower) + uint16(cpu.register.x)
+		upperAddr := uint16(lowerAddr + 1)
+
+		lower, err := cpu.memory.Read(lowerAddr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: IndirectX: failed read lower. addr: %x, err: %w", lowerAddr, err)
+		}
+		upper, err := cpu.memory.Read(upperAddr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: IndirectX: failed read upper. addr: %x, err: %w", upperAddr, err)
+		}
+
+		addr := bit_helper.BytesToUint16(lower, upper)
+		return addr, 0, nil
+	case IndirectY:
+		// *(lower) + Y
+		lowerAddr, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: IndirectY: failed read lowerAddr. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+		upperAddr := lowerAddr + 1
+
+		lower, err := cpu.memory.Read(uint16(lowerAddr))
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: IndirectY: failed read lower. addr: %x, err: %w", lowerAddr, err)
+		}
+		upper, err := cpu.memory.Read(uint16(upperAddr))
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: IndirectY: failed read upper. addr: %x, err: %w", upperAddr, err)
+		}
+
+		addr := bit_helper.BytesToUint16(lower, upper)
+		beforeAddr := addr
+
+		addr += uint16(cpu.register.y)
+		if (beforeAddr & 0xFF00) != (addr & 0xFF00) {
+			additionalCycle = 1
+		}
+		return addr, additionalCycle, nil
+	case Indirect:
+		// **(addr)
+
+		indirectLower, err := cpu.memory.Read(cpu.register.pc + 1)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Indirect: failed read indirectLower. addr: %x, err: %w", cpu.register.pc+1, err)
+		}
+
+		indirectUpper, err := cpu.memory.Read(cpu.register.pc + 2)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Indirect: failed read indirectUpper. addr: %x, err: %w", cpu.register.pc+2, err)
+		}
+
+		// インクリメントにおいて下位バイトからのキャリーを無視するために、下位バイトに加算してからキャストする
+		// 符号なし整数の加算のオーバーフロー時の挙動を期待しているので、未定義かも
+
+		lowerAddr := bit_helper.BytesToUint16(indirectLower, indirectUpper)
+
+		// 6502 CPU のバグ：下位バイトが 0xFF の場合、次のアドレスはページ境界をまたがず、下位バイトのみラップアラウンドする。
+		upperAddr := bit_helper.BytesToUint16(indirectLower+1, indirectUpper)
+
+		lower, err := cpu.memory.Read(lowerAddr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Indirect: failed read lower. addr: %x, err: %w", lowerAddr, err)
+		}
+
+		upper, err := cpu.memory.Read(upperAddr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("fetchAddr: Indirect: failed read upper. addr: %x, err: %w", upperAddr, err)
+		}
+
+		addr := bit_helper.BytesToUint16(lower, upper)
+		return addr, 0, nil
+
+	default:
+		return 0, 0, fmt.Errorf("fetchAddr: invalid addressing mode was specified. mode: %d", mode)
+	}
 }
 
 // 加算処理
@@ -119,6 +321,8 @@ func (cpu *CPU) adc(operand byte) {
 
 	// ネガティブフラグの更新
 	cpu.setFlag(negativeFlag, cpu.register.a&0x80 != 0)
+
+	//
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {

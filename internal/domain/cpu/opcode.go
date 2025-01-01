@@ -5,8 +5,8 @@ package cpu
 type Opcode struct {
 	Mnemonic       Mnemonic
 	AddressingMode AddressingMode
-	Length         int // 命令の長さ
-	Cycles         int // サイクル数(処理にかかる時間)
+	Length         uint8 // 命令の長さ
+	Cycles         uint8 // サイクル数(処理にかかる時間)
 }
 
 // Opcodes Read専用
