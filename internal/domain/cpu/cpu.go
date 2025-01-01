@@ -36,18 +36,17 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed fetchOpcode. err: %w", err)
 	}
+
 	switch opcode.Mnemonic {
 	case ADC:
-		cycles, err := cpu.adc(opcode)
-		if err != nil {
-			return 0, fmt.Errorf("failed cpu.adc. opcode: %+v, err: %w", opcode, err)
-		}
-		return cycles, nil
-	case LDA:
-		// todo
-
+		cycles, err = cpu.adc(opcode)
+	case AND:
+		cycles, err = cpu.and(opcode)
 	}
-	return
+	if err != nil {
+		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
+	}
+	return cycles, nil
 }
 
 func (cpu *CPU) Interrupt() error {
@@ -298,6 +297,8 @@ func (cpu *CPU) fetchAddr(mode AddressingMode) (addr uint16, additionalCycle uin
 }
 
 // 加算処理
+// https://www.nesdev.org/wiki/Instruction_reference#ADC
+// A = A + memory + C
 func (cpu *CPU) adc(opcode Opcode) (cycles uint8, err error) {
 	if opcode.Mnemonic != ADC {
 		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
@@ -327,7 +328,7 @@ func (cpu *CPU) adc(opcode Opcode) (cycles uint8, err error) {
 	cpu.setFlag(zeroFlag, cpu.register.a == 0)
 
 	// ネガティブフラグの更新
-	cpu.setFlag(negativeFlag, cpu.register.a&0x80 != 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.a))
 
 	// overflow
 	// http://forums.nesdev.com/viewtopic.php?t=6331
@@ -335,6 +336,29 @@ func (cpu *CPU) adc(opcode Opcode) (cycles uint8, err error) {
 	cpu.setFlag(overflowFlag, overflow)
 
 	// PC
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycle, nil
+}
+
+// and
+// document: https://www.nesdev.org/wiki/Instruction_reference#AND
+// A = A & memory
+func (cpu *CPU) and(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != AND {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycle, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: and: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.a & arg
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+	cpu.setA(result)
+
 	cpu.incrementPC(uint16(opcode.Length))
 	return opcode.Cycles + additionalCycle, nil
 }
@@ -361,6 +385,10 @@ func (cpu *CPU) setPC(count uint16) {
 
 func (cpu *CPU) setA(a byte) {
 	cpu.register.a = a
+}
+
+func (cpu *CPU) isNegative(b byte) bool {
+	return b&0x80 != 0
 }
 
 /**
