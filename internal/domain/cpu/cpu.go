@@ -50,6 +50,8 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.bcs(opcode)
 	case BEQ:
 		cycles, err = cpu.beq(opcode)
+	case BIT:
+		cycles, err = cpu.bit(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -481,6 +483,29 @@ func (cpu *CPU) beq(opcode Opcode) (cycles uint8, err error) {
 
 	cpu.setPC(addr)
 	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// bit
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BIT
+// A & memory
+func (cpu *CPU) bit(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BIT {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bit: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.a & arg
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(overflowFlag, (arg&0x40) == 0x40) // 6bit目が1ならoverflowをtrue
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
