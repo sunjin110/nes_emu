@@ -31,24 +31,22 @@ func NewCPU(memory memory.Memory, prgROM prgrom.PRGROM) (*CPU, error) {
 
 // Run CPUの1サイクルの実行
 // clockCount: PPUやAPUとの同期のため、実行時間にかかった実行クロック数を返す
-func (cpu *CPU) Run() (clockCount uint8, err error) {
+func (cpu *CPU) Run() (cycles uint8, err error) {
 	opcode, err := cpu.fetchOpcode()
 	if err != nil {
 		return 0, fmt.Errorf("failed fetchOpcode. err: %w", err)
 	}
-	// TODO fetchOperand
-
-	var additionalCycle uint16
-
-	// TODO: opcodeのmnemonicの挙動を実装する
 	switch opcode.Mnemonic {
 	case ADC:
-		cpu.adc(0) // TODO
+		cycles, err := cpu.adc(opcode)
+		if err != nil {
+			return 0, fmt.Errorf("failed cpu.adc. opcode: %+v, err: %w", opcode, err)
+		}
+		return cycles, nil
+	case LDA:
+		// todo
+
 	}
-
-	// TODO count up PC
-	cpu.incrementPC(uint16(opcode.Cycles) + additionalCycle)
-
 	return
 }
 
@@ -300,7 +298,16 @@ func (cpu *CPU) fetchAddr(mode AddressingMode) (addr uint16, additionalCycle uin
 }
 
 // 加算処理
-func (cpu *CPU) adc(operand byte) {
+func (cpu *CPU) adc(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != ADC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	operand, additionalCycle, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: adc: failed fetchArg. err: %w", err)
+	}
+
 	// 8bit以上の計算ができるように
 	var carry byte
 	if cpu.getFlag(carryFlag) {
@@ -314,7 +321,7 @@ func (cpu *CPU) adc(operand byte) {
 	cpu.setFlag(carryFlag, result > 0xFF)
 
 	// 結果を8ビットに収める
-	cpu.register.a = byte(result & 0xFF)
+	cpu.setA(byte(result & 0xFF))
 
 	// ゼロフラグ
 	cpu.setFlag(zeroFlag, cpu.register.a == 0)
@@ -322,7 +329,14 @@ func (cpu *CPU) adc(operand byte) {
 	// ネガティブフラグの更新
 	cpu.setFlag(negativeFlag, cpu.register.a&0x80 != 0)
 
-	//
+	// overflow
+	// http://forums.nesdev.com/viewtopic.php?t=6331
+	overflow := ((cpu.register.a^operand)&0x80 == 0) && ((cpu.register.a^byte(result))&0x80 != 0)
+	cpu.setFlag(overflowFlag, overflow)
+
+	// PC
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycle, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
@@ -339,6 +353,14 @@ func (cpu *CPU) getFlag(flag statusFlag) bool {
 
 func (cpu *CPU) incrementPC(count uint16) {
 	cpu.register.pc += count
+}
+
+func (cpu *CPU) setPC(count uint16) {
+	cpu.register.pc = count
+}
+
+func (cpu *CPU) setA(a byte) {
+	cpu.register.a = a
 }
 
 /**
