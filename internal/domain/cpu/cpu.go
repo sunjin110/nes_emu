@@ -42,6 +42,8 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.adc(opcode)
 	case AND:
 		cycles, err = cpu.and(opcode)
+	case ASL:
+		cycles, err = cpu.asl(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -361,6 +363,43 @@ func (cpu *CPU) and(opcode Opcode) (cycles uint8, err error) {
 
 	cpu.incrementPC(uint16(opcode.Length))
 	return opcode.Cycles + additionalCycle, nil
+}
+
+// asl
+// doc: https://www.nesdev.org/wiki/Instruction_reference#ASL
+// value = value << 1, or visually: C <- [76543210] <- 0
+func (cpu *CPU) asl(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != ASL {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: asl: failed fetchArg. err: %w", err)
+	}
+
+	result := arg << 1
+
+	// 最上位ビット(MSB)が立っているときにシフトしたらcarryする
+	cpu.setFlag(carryFlag, arg&0x80 != 0)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	if opcode.AddressingMode == Accumulator {
+		cpu.setA(result)
+	} else {
+		// ASLはメモリ書き込み時に追加サイクルを必要としないため
+		addr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+		if err != nil {
+			return 0, fmt.Errorf("CPU: asl: failed fetch addr for writing result. err: %w", err)
+		}
+		if err := cpu.memory.Write(addr, result); err != nil {
+			return 0, fmt.Errorf("CPU: asl: failed write memory. addr: %x, err: %w", addr, err)
+		}
+	}
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
