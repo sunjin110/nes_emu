@@ -52,6 +52,18 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.beq(opcode)
 	case BIT:
 		cycles, err = cpu.bit(opcode)
+	case BMI:
+		cycles, err = cpu.bmi(opcode)
+	case BNE:
+		cycles, err = cpu.bne(opcode)
+	case BPL:
+		cycles, err = cpu.bpl(opcode)
+	case BRK:
+		cycles, err = cpu.brk(opcode)
+	case BVC:
+		cycles, err = cpu.bvc(opcode)
+	case BVS:
+		cycles, err = cpu.bvs(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -59,8 +71,8 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 	return cycles, nil
 }
 
-func (cpu *CPU) Interrupt() error {
-	// 割り込み処理
+func (cpu *CPU) Interrupt(t InterruptType) error {
+	// TODO: 割り込み処理
 	return nil
 }
 
@@ -506,6 +518,149 @@ func (cpu *CPU) bit(opcode Opcode) (cycles uint8, err error) {
 
 	cpu.incrementPC(uint16(opcode.Length))
 	return opcode.Cycles + additionalCycles, nil
+}
+
+// bmi Branch if Minus
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BMI
+// PC = PC + 2 + memory (signed)
+func (cpu *CPU) bmi(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BMI {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if !cpu.getFlag(negativeFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bmi: failed fetchAddr. err: %w", err)
+	}
+
+	cpu.setPC(addr)
+	// 分岐成立時に+1する
+	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
+	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// bne Branch if Not Equal
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BNE
+// PC = PC + 2 + memory (signed)
+func (cpu *CPU) bne(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BNE {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if cpu.getFlag(zeroFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bne: failed fetchAddr. err: %w", err)
+	}
+
+	cpu.setPC(addr)
+
+	// 分岐成立時に+1する
+	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
+	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// bpl Branch if Plus
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BPL
+// PC = PC + 2 + memory (signed
+func (cpu *CPU) bpl(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BPL {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if cpu.getFlag(negativeFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, addtionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bpl: failed fetchAddr. err: %w", err)
+	}
+
+	cpu.setPC(addr)
+
+	// 分岐成立時に+1する
+	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
+	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + addtionalCycles + 1, nil
+}
+
+// brk
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BRK
+// push PC + 2 to stack
+// push NV11DIZC flags to stack
+// PC = ($FFFE)
+func (cpu *CPU) brk(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BRK {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(breakFlag, true)
+	if err := cpu.Interrupt(InterruptTypeBRK); err != nil {
+		return 0, fmt.Errorf("CPU: brk: faied interrupt. err: %w", err)
+	}
+	return opcode.Cycles, nil
+}
+
+// bvc
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BVC
+// PC = PC + 2 + memory (signed)
+func (cpu *CPU) bvc(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BVC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if cpu.getFlag(overflowFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bvc: faied interrupt. err: %w", err)
+	}
+	cpu.setPC(addr)
+
+	// 分岐成立時に+1する
+	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
+	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// bvc Branch if Overflow Set
+// doc: https://www.nesdev.org/wiki/Instruction_reference#BVS
+// PC = PC + 2 + memory (signed)
+func (cpu *CPU) bvs(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != BVS {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if !cpu.getFlag(overflowFlag) {
+		cpu.incrementPC(uint16(opcode.Length))
+		return opcode.Cycles, nil
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: bvs: faied interrupt. err: %w", err)
+	}
+	cpu.setPC(addr)
+
+	// 分岐成立時に+1する
+	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
+	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
+	return opcode.Cycles + additionalCycles + 1, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
