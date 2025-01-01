@@ -9,8 +9,6 @@ import (
 	"github.com/sunjin110/nes_emu/pkg/bit_helper"
 )
 
-const memorySize = 16 * 1024 // 16KB
-
 // CPU document: https://www.nesdev.org/wiki/CPU
 type CPU struct {
 	memory   memory.Memory
@@ -64,6 +62,20 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.bvc(opcode)
 	case BVS:
 		cycles, err = cpu.bvs(opcode)
+	case CLC:
+		cycles, err = cpu.clc(opcode)
+	case CLD:
+		cycles, err = cpu.cld(opcode)
+	case CLI:
+		cycles, err = cpu.cli(opcode)
+	case CLV:
+		cycles, err = cpu.clv(opcode)
+	case CMP:
+		cycles, err = cpu.cmp(opcode)
+	case CPX:
+		cycles, err = cpu.cpx(opcode)
+	case CPY:
+		cycles, err = cpu.cpy(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -661,6 +673,117 @@ func (cpu *CPU) bvs(opcode Opcode) (cycles uint8, err error) {
 	// 分岐が成立すると、分岐先のアドレスを再計算して新しい命令をフェッチする必要があり、パイプラインが「破棄」されます。
 	// このパイプライン破棄により、分岐成立時には追加の1サイクルが必要になります。
 	return opcode.Cycles + additionalCycles + 1, nil
+}
+
+// clc: Clear Carry
+// doc: https://www.nesdev.org/wiki/Instruction_reference#CLC
+// C = 0
+func (cpu *CPU) clc(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CLC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(carryFlag, false)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// cld: Clear Decimal
+// doc: https://www.nesdev.org/wiki/Instruction_reference#CLD
+// D = 0
+func (cpu *CPU) cld(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CLD {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(decimalFlag, false)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// cli Clear Interrupt Disable
+// doc: https://www.nesdev.org/wiki/Instruction_reference#CLI
+func (cpu *CPU) cli(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CLI {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(interruptFlag, false)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// clv: Clear Overflow
+// doc: https://www.nesdev.org/wiki/Instruction_reference#CLV
+func (cpu *CPU) clv(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CLV {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(overflowFlag, false)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// cmp: Compare A
+// doc: https://www.nesdev.org/wiki/Instruction_reference#CLV
+// A - memory
+func (cpu *CPU) cmp(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CMP {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: cmp: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.a - arg
+
+	cpu.setFlag(carryFlag, cpu.register.a >= arg)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// cpx: Compare X
+func (cpu *CPU) cpx(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CPX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: cpx: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.x - arg
+
+	cpu.setFlag(carryFlag, cpu.register.x >= arg)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// cpy: Compare Y
+func (cpu *CPU) cpy(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != CPY {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: cpy: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.y - arg
+
+	cpu.setFlag(carryFlag, cpu.register.y >= arg)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
