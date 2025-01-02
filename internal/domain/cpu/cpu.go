@@ -82,6 +82,8 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.dex(opcode)
 	case DEY:
 		cycles, err = cpu.dey(opcode)
+	case EOR:
+		cycles, err = cpu.eor(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -849,6 +851,27 @@ func (cpu *CPU) dey(opcode Opcode) (cycles uint8, err error) {
 	cpu.setY(result)
 	cpu.incrementPC(uint16(opcode.Length))
 	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) eor(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != EOR {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: eor: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.a ^ arg
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.setA(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
 }
 
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
