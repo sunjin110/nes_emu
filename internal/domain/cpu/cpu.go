@@ -84,6 +84,22 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.dey(opcode)
 	case EOR:
 		cycles, err = cpu.eor(opcode)
+	case INC:
+		cycles, err = cpu.inc(opcode)
+	case INX:
+		cycles, err = cpu.inx(opcode)
+	case INY:
+		cycles, err = cpu.iny(opcode)
+	case JMP:
+		cycles, err = cpu.jmp(opcode)
+	case JSR:
+		cycles, err = cpu.jsr(opcode)
+	case LDA:
+		cycles, err = cpu.lda(opcode)
+	case LDX:
+		cycles, err = cpu.ldx(opcode)
+	case LDY:
+		cycles, err = cpu.ldy(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -874,6 +890,171 @@ func (cpu *CPU) eor(opcode Opcode) (cycles uint8, err error) {
 	return opcode.Cycles + additionalCycles, nil
 }
 
+func (cpu *CPU) inc(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != INC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: inc: failed fetchAddr. err: %w", err)
+	}
+
+	arg, err := cpu.memory.Read(addr)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: inc: failed get memory value. err: %w", err)
+	}
+
+	result := arg + 1
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	if err := cpu.memory.Write(addr, result); err != nil {
+		return 0, fmt.Errorf("CPU: inc: failed write memory. addr: %x, value: %x, err: %w", addr, result, err)
+	}
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) inx(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != INX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result := cpu.register.x + 1
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.setX(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) iny(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != INY {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result := cpu.register.y + 1
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.setY(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// jmp: Jmp to Address
+// doc: https://www.nesdev.org/wiki/Instruction_reference#JMP
+func (cpu *CPU) jmp(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != JMP {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	// JMP命令は追加サイクルは発生しない
+	addr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: jmp: failed fetchAddr. err: %w", err)
+	}
+
+	cpu.setPC(addr)
+	return opcode.Cycles, nil
+}
+
+// jsr: Jump to Subroutine
+// doc: https://www.nesdev.org/wiki/Instruction_reference#JSR
+func (cpu *CPU) jsr(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != JSR {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	jumpAddr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: jsr: failed fetchAddr. err: %w", err)
+	}
+
+	// push
+	// リターンアドレスは PC + 3 だが、それから 1 を引いたものを stack にプッシュする
+	returnAddr := cpu.register.pc + 2
+
+	// lower -> upperの順にpush
+	// ここは参考と違ったので注意
+	lower, upper := bit_helper.Uint16ToBytes(returnAddr)
+	if err := cpu.pushStack(lower); err != nil {
+		return 0, fmt.Errorf("CPU: jsr: failed push lower returnAddr to stack. err: %w", err)
+	}
+	if err := cpu.pushStack(upper); err != nil {
+		return 0, fmt.Errorf("CPU: jsr: failed push upper returnAddr to stack. err: %w", err)
+	}
+
+	cpu.setPC(jumpAddr)
+	return opcode.Cycles, nil
+}
+
+// lda Load A
+func (cpu *CPU) lda(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != LDA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: lda: failed fetchArg. err: %w", err)
+	}
+
+	cpu.setFlag(zeroFlag, arg == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(arg))
+
+	cpu.setA(arg)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// ldx: Load X
+func (cpu *CPU) ldx(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != LDA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: ldx: failed fetchArg. err: %w", err)
+	}
+
+	cpu.setFlag(zeroFlag, arg == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(arg))
+
+	cpu.setX(arg)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// ldy: Load Y
+func (cpu *CPU) ldy(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != LDA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: ldy: failed fetchArg. err: %w", err)
+	}
+
+	cpu.setFlag(zeroFlag, arg == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(arg))
+
+	cpu.setY(arg)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
 	if value {
 		cpu.register.p |= flag.toByte() // OR
@@ -908,6 +1089,28 @@ func (cpu *CPU) setY(y byte) {
 
 func (cpu *CPU) isNegative(b byte) bool {
 	return b&0x80 != 0
+}
+
+// pushStack pushes a byte onto the stack.
+// NES stack resides in page 2 (0x0100 - 0x01FF).
+func (cpu *CPU) pushStack(b byte) error {
+	spAddr := uint16(cpu.register.sp) | uint16(0x0100)
+
+	if err := cpu.memory.Write(spAddr, b); err != nil {
+		return fmt.Errorf("CPU: pushStack: failed write memory. addr: %x, err: %w", spAddr, err)
+	}
+	cpu.register.sp -= 1
+	return nil
+}
+
+func (cpu *CPU) popStack() (byte, error) {
+	spAddr := uint16(cpu.register.sp) | uint16(0x0100)
+	b, err := cpu.memory.Read(spAddr)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: popStack: failed read memory. addr: %x, err: %w", spAddr, err)
+	}
+	cpu.register.sp += 1
+	return b, nil
 }
 
 /**
