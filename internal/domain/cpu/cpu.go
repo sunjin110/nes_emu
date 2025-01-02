@@ -76,6 +76,12 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.cpx(opcode)
 	case CPY:
 		cycles, err = cpu.cpy(opcode)
+	case DEC:
+		cycles, err = cpu.dec(opcode)
+	case DEX:
+		cycles, err = cpu.dex(opcode)
+	case DEY:
+		cycles, err = cpu.dey(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -786,6 +792,65 @@ func (cpu *CPU) cpy(opcode Opcode) (cycles uint8, err error) {
 	return opcode.Cycles + additionalCycles, nil
 }
 
+// dec: Decrement Memory
+func (cpu *CPU) dec(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != DEC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	// ImmidiateやAccumulatorは必ず渡されない
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: dec: failed fetchAddr. err: %w", err)
+	}
+
+	arg, err := cpu.memory.Read(addr)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: dec: failed get memory value. err: %w", err)
+	}
+
+	result := arg - 1
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	// write
+	if err := cpu.memory.Write(addr, result); err != nil {
+		return 0, fmt.Errorf("CPU: dec: failed write memory. addr: %x, value: %x, err: %w", addr, result, err)
+	}
+
+	cpu.incrementPC(uint16(opcode.Length))
+
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) dex(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != DEX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result := cpu.register.x - 1
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+	cpu.setX(result)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) dey(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != DEY {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result := cpu.register.y - 1
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+	cpu.setY(result)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
 	if value {
 		cpu.register.p |= flag.toByte() // OR
@@ -808,6 +873,14 @@ func (cpu *CPU) setPC(count uint16) {
 
 func (cpu *CPU) setA(a byte) {
 	cpu.register.a = a
+}
+
+func (cpu *CPU) setX(x byte) {
+	cpu.register.x = x
+}
+
+func (cpu *CPU) setY(y byte) {
+	cpu.register.y = y
 }
 
 func (cpu *CPU) isNegative(b byte) bool {
