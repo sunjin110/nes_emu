@@ -39,6 +39,11 @@ const (
 	negativeFlag  statusFlag = 1 << 7
 )
 
+const (
+	// masks breakFlagと未使用ビットを1にする(未使用ビットを1にするのはハードウェアの仕様)
+	bFlagMask uint8 = 0b00110000
+)
+
 func (sf statusFlag) toByte() byte {
 	return byte(sf)
 }

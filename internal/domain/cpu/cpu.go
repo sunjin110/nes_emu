@@ -100,6 +100,22 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.ldx(opcode)
 	case LDY:
 		cycles, err = cpu.ldy(opcode)
+	case LSR:
+		cycles, err = cpu.lsr(opcode)
+	case NOP:
+		cycles, err = cpu.nop(opcode)
+	case ORA:
+		cycles, err = cpu.ora(opcode)
+	case PHA:
+		cycles, err = cpu.pha(opcode)
+	case PHP:
+		cycles, err = cpu.php(opcode)
+	case PLA:
+		cycles, err = cpu.pla(opcode)
+	case PLP:
+		cycles, err = cpu.plp(opcode)
+	case ROL:
+		cycles, err = cpu.rol(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -1055,6 +1071,178 @@ func (cpu *CPU) ldy(opcode Opcode) (cycles uint8, err error) {
 	return opcode.Cycles + additionalCycles, nil
 }
 
+// lsr Logical Shift Right
+// value = value >> 1, or visually: 0 -> [76543210] -> C
+func (cpu *CPU) lsr(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != LSR {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: lsr: failed fetchArg. err: %w", err)
+	}
+
+	result := arg >> 1
+
+	// 右にシフトして、最後のビットがなくなってしまう場合にcarryフラグが立つ
+	cpu.setFlag(carryFlag, (arg&1) == 1)
+	cpu.setFlag(zeroFlag, result == 0)
+	// LSR命令では、結果の最上位ビットが常に 0 になるため、ネガティブフラグは常にクリアされる
+	cpu.setFlag(negativeFlag, false)
+
+	if opcode.AddressingMode == Accumulator {
+		cpu.setA(result)
+	} else {
+		// arg取得時にすでにサイクルコストを支払っているんため
+		addr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+		if err != nil {
+			return 0, fmt.Errorf("CPU: lsr: failed fetch addr for writing result. err: %w", err)
+		}
+		if err := cpu.memory.Write(addr, result); err != nil {
+			return 0, fmt.Errorf("CPU: lsr: failed write memory. addr: %x, err: %w", addr, err)
+		}
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) nop(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != NOP {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	// DO noting
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// ora Bitwise OR
+// doc: https://www.nesdev.org/wiki/Instruction_reference#ORA
+func (cpu *CPU) ora(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != ORA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: ora: failed fetchArg. err: %w", err)
+	}
+
+	result := cpu.register.a | arg
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.setA(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// pha Push A
+func (cpu *CPU) pha(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != PHA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	if err := cpu.pushStack(cpu.register.a); err != nil {
+		return 0, fmt.Errorf("CPU: pha: failed push a to stack. err: %w", err)
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) php(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != PHP {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	// cpu.register.p
+	// breakフラグは物理的にpには存在しない
+	if err := cpu.pushStack(cpu.register.p | bFlagMask); err != nil {
+		return 0, fmt.Errorf("CPU: php: failed push p to stack. err: %w", err)
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) pla(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != PLA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: pla: failed pop stack. err: %w", err)
+	}
+
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	cpu.setA(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) plp(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != PLP {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: plp: failed pop stack. err: %w", err)
+	}
+
+	// 取得したresultのB4とB5を除去 | 現在のPフラグのB4とB5だけ抽出
+	p := (result &^ bFlagMask) | (cpu.register.p & bFlagMask)
+	cpu.setP(p)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// rol Rotate Left
+// value = value << 1 through C, or visually: C <- [76543210] <- C
+func (cpu *CPU) rol(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != ROL {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rol: failed fetchArg. err: %w", err)
+	}
+
+	result := arg << 1
+	if cpu.getFlag(carryFlag) {
+		// carryフラグがある場合のみ最後に1を追加
+		result |= 1
+	}
+
+	// 最上位ビット(MSB)が立っているときにシフトしたらcarryする
+	cpu.setFlag(carryFlag, arg&0x80 != 0)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	if opcode.AddressingMode == Accumulator {
+		cpu.setA(result)
+	} else {
+		// メモリ書き込み時に追加サイクルを必要としないため
+		addr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+		if err != nil {
+			return 0, fmt.Errorf("CPU: rol: failed fetch addr for writing result. err: %w", err)
+		}
+
+		if err := cpu.memory.Write(addr, result); err != nil {
+			return 0, fmt.Errorf("CPU: rol: failed write memory. addr: %x, err: %w", addr, err)
+		}
+	}
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
 	if value {
 		cpu.register.p |= flag.toByte() // OR
@@ -1077,6 +1265,10 @@ func (cpu *CPU) setPC(count uint16) {
 
 func (cpu *CPU) setA(a byte) {
 	cpu.register.a = a
+}
+
+func (cpu *CPU) setP(p byte) {
+	cpu.register.p = p
 }
 
 func (cpu *CPU) setX(x byte) {
