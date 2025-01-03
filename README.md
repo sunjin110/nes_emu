@@ -7,13 +7,23 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
 - [x] *.nesを読んで解析、各ROMを切り出しする
 -> https://qiita.com/bokuweb/items/1575337bef44ae82f4d3 hello worldする
 - [x] RAMの実装 : 参考: https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=35"
-- [x] PRG-ROMからPCを取得
+- [x] メモリーの実装
 - [x] cpu register
+    - [x] PRG-ROMからPCを取得
 - [ ] CPU run
-    - [x] ADCの実装
-    - [ ] fetchOperandの実装
-- [ ] CPUがSRAMの情報を取得できる様にする https://speakerdeck.com/bokuweb/huamikonemiyuretafalsechuang-rifang?slide=38
-- 
+    - [ ] 命令の実装
+    - [x] fetchArgの実装
+    - [x] fetchAddrの実装
+    - [x] popStack, pushStackの実装
+    - [ ] 割り込み処理
+    - [ ] テストの実装
+        - [ ] 各命令を実行した後のレジスタとメモリの状況が想定のものであることの確認
+- [ ] メモリマップどIO
+    - [x] 各モジュールにアクセスできるところまで実装した
+- [ ] PPU
+- [ ] APU
+- [ ] コントローラー
+
 
 
 # 作成するもの
