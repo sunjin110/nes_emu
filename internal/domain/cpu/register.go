@@ -4,6 +4,10 @@ import (
 	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
 )
 
+const (
+	initSPAddr = 0xFD
+)
+
 type Register struct {
 	a  byte   // Accumulator 命令の計算結果の格納
 	x  byte   // 特定のアドレッシングモード (後述) でインデックスとして使われます。 INX 命令と組み合わせてループのカウンタとしても使われる様子？
@@ -22,8 +26,8 @@ func NewRegister(prgROM prgrom.PRGROM) (*Register, error) {
 		x:  0, // TODO 初期化
 		y:  0, // TODO 初期化
 		pc: prgROM.InitPC(),
-		sp: 0xFD, // https://www.pagetable.com/?p=410
-		p:  0,    // TODO 初期化
+		sp: initSPAddr, // https://www.pagetable.com/?p=410
+		p:  0,          // TODO 初期化
 	}, nil
 }
 

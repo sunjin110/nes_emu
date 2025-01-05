@@ -155,9 +155,129 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 	return cycles, nil
 }
 
+// doc: https://www.nesdev.org/wiki/CPU_interrupts
 func (cpu *CPU) Interrupt(t InterruptType) error {
-	// TODO: 割り込み処理
-	return nil
+
+	nested := cpu.getFlag(interruptFlag)
+	if nested && (t == InterruptTypeBRK || t == InterruptTypeIRQ) {
+		// nested interrupt が許されるのは RESET と NMI のみ
+		// エラーにすべき?
+		return nil
+	}
+
+	// 割り込むフラグを追加する
+	cpu.setFlag(interruptFlag, true)
+
+	switch t {
+	case InterruptTypeNMI:
+
+		lowerPC, upperPC := bit_helper.Uint16ToBytes(cpu.register.pc)
+		if err := cpu.pushStack(lowerPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: NMI: failed push stack. err: %w", err)
+		}
+		if err := cpu.pushStack(upperPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: NMI: failed push stack. err: %w", err)
+		}
+
+		// NMI, IRQ のときは 5, 4 bit 目を0にする
+		cpu.setFlag(breakFlag, false)
+		pushData := cpu.register.p | (1 << 5) // 5bit目(未使用)を必ず1にする
+		if err := cpu.pushStack(pushData); err != nil {
+			return fmt.Errorf("CPU: Interrupt: NMI: failed push stack. err: %w", err)
+		}
+
+		interruptLowerPC, err := cpu.memory.Read(memory.NMIInterruptLowerPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: NMI: failed read memory. err: %w", err)
+		}
+
+		interruptUpperPC, err := cpu.memory.Read(memory.NMIInterruptUpperPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: NMI: failed read memory. err: %w", err)
+		}
+
+		pc := bit_helper.BytesToUint16(interruptLowerPC, interruptUpperPC)
+		cpu.setPC(pc)
+		return nil
+	case InterruptTypeReset:
+		interruptLowerPC, err := cpu.memory.Read(memory.ResetInterruptLowerPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: Reset: failed read memory. err: %w", err)
+		}
+
+		interruptUpperPC, err := cpu.memory.Read(memory.ResetInterruptUpperPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: Reset: failed read memory. err: %w", err)
+		}
+
+		// https://www.pagetable.com/?p=410
+		cpu.setSP(initSPAddr)
+
+		pc := bit_helper.BytesToUint16(interruptLowerPC, interruptUpperPC)
+		cpu.setPC(pc)
+		return nil
+	case InterruptTypeIRQ:
+		lowerPC, upperPC := bit_helper.Uint16ToBytes(cpu.register.pc)
+		if err := cpu.pushStack(lowerPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: IRQ: failed push stack. err: %w", err)
+		}
+		if err := cpu.pushStack(upperPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: IRQ: failed push stack. err: %w", err)
+		}
+
+		// NMI, IRQ のときは 5, 4 bit 目を0にする
+		cpu.setFlag(breakFlag, false)
+		pushData := cpu.register.p | (1 << 5) // 5bit目(未使用)を必ず1にする
+		if err := cpu.pushStack(pushData); err != nil {
+			return fmt.Errorf("CPU: Interrupt: IRQ: failed push stack. err: %w", err)
+		}
+
+		interruptLowerPC, err := cpu.memory.Read(memory.IRQInterruptLowerPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: IRQ: failed read memory. err: %w", err)
+		}
+
+		interruptUpperPC, err := cpu.memory.Read(memory.IRQInterruptUpperPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: IRQ: failed read memory. err: %w", err)
+		}
+
+		pc := bit_helper.BytesToUint16(interruptLowerPC, interruptUpperPC)
+		cpu.setPC(pc)
+		return nil
+	case InterruptTypeBRK:
+		cpu.incrementPC(1)
+
+		lowerPC, upperPC := bit_helper.Uint16ToBytes(cpu.register.pc)
+		if err := cpu.pushStack(lowerPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: BRK: failed push stack. err: %w", err)
+		}
+		if err := cpu.pushStack(upperPC); err != nil {
+			return fmt.Errorf("CPU: Interrupt: BRK: failed push stack. err: %w", err)
+		}
+
+		cpu.setFlag(breakFlag, true)
+		pushData := cpu.register.p | (1 << 5) // 5bit目(未使用)を必ず1にする
+		if err := cpu.pushStack(pushData); err != nil {
+			return fmt.Errorf("CPU: Interrupt: BRK: failed push stack. err: %w", err)
+		}
+
+		interruptLowerPC, err := cpu.memory.Read(memory.BreakInterruptLowerPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: BRK: failed read memory. err: %w", err)
+		}
+
+		interruptUpperPC, err := cpu.memory.Read(memory.BreakInterruptUpperPCAddr)
+		if err != nil {
+			return fmt.Errorf("CPU: Interrupt: BRK: failed read memory. err: %w", err)
+		}
+
+		pc := bit_helper.BytesToUint16(interruptLowerPC, interruptUpperPC)
+		cpu.setPC(pc)
+		return nil
+	default:
+		return fmt.Errorf("CPU: Interrupt: undefined interrupt type was specified. type: %d", t)
+	}
 }
 
 func (cpu *CPU) Reset() error {

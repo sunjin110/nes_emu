@@ -11,6 +11,17 @@ import (
 	"github.com/sunjin110/nes_emu/pkg/logger"
 )
 
+const (
+	NMIInterruptLowerPCAddr   uint16 = 0xFFFA
+	NMIInterruptUpperPCAddr   uint16 = 0xFFFB
+	ResetInterruptLowerPCAddr uint16 = 0xFFFC
+	ResetInterruptUpperPCAddr uint16 = 0xFFFD
+	IRQInterruptLowerPCAddr   uint16 = 0xFFFE
+	IRQInterruptUpperPCAddr   uint16 = 0xFFFF
+	BreakInterruptLowerPCAddr uint16 = 0xFFFE
+	BreakInterruptUpperPCAddr uint16 = 0xFFFF
+)
+
 type Memory struct {
 	ram        ram.RAM               // RAM:ワーキングメモリ(0x0000-0x07ff) 0x0800-0x1fffはミラー
 	ppu        ppu.PPU               // PPUレジスタ(0x2000〜0x2007)　0x2008-0x3fffはミラー
