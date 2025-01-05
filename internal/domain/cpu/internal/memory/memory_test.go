@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/sunjin110/nes_emu/internal/domain/memory"
+	"github.com/sunjin110/nes_emu/internal/domain/cpu/internal/memory"
 	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
 )
 
