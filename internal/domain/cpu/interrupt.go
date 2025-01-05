@@ -4,7 +4,7 @@ type InterruptType int
 
 const (
 	InterruptTypeBRK InterruptType = iota
-	InterruptTypeNMI
+	InterruptTypeNMI               // Non Maskable Interrupt
 	InterruptTypeReset
 	InterruptTypeIRQ
 )

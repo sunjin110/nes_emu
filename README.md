@@ -17,7 +17,7 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
     - [x] fetchArgの実装
     - [x] fetchAddrの実装
     - [x] popStack, pushStackの実装
-    - [ ] 割り込み処理
+    - [x] 割り込み処理: Interrupt
     - [ ] テストの実装
         - [ ] 各命令を実行した後のレジスタとメモリの状況が想定のものであることの確認
 - [ ] メモリマップどIO
