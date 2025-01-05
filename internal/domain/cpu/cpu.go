@@ -116,6 +116,38 @@ func (cpu *CPU) Run() (cycles uint8, err error) {
 		cycles, err = cpu.plp(opcode)
 	case ROL:
 		cycles, err = cpu.rol(opcode)
+	case ROR:
+		cycles, err = cpu.ror(opcode)
+	case RTI:
+		cycles, err = cpu.rti(opcode)
+	case RTS:
+		cycles, err = cpu.rts(opcode)
+	case SBC:
+		cycles, err = cpu.sbc(opcode)
+	case SEC:
+		cycles, err = cpu.sec(opcode)
+	case SED:
+		cycles, err = cpu.sed(opcode)
+	case SEI:
+		cycles, err = cpu.sei(opcode)
+	case STA:
+		cycles, err = cpu.sta(opcode)
+	case STX:
+		cycles, err = cpu.stx(opcode)
+	case STY:
+		cycles, err = cpu.sty(opcode)
+	case TAX:
+		cycles, err = cpu.tax(opcode)
+	case TAY:
+		cycles, err = cpu.tay(opcode)
+	case TSX:
+		cycles, err = cpu.tsx(opcode)
+	case TXA:
+		cycles, err = cpu.txa(opcode)
+	case TXS:
+		cycles, err = cpu.txs(opcode)
+	case TYA:
+		cycles, err = cpu.tya(opcode)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("CPU: failed run. opcode: %+v, err: %w", opcode, err)
@@ -1243,6 +1275,298 @@ func (cpu *CPU) rol(opcode Opcode) (cycles uint8, err error) {
 	return opcode.Cycles + additionalCycles, nil
 }
 
+// ror Rotate Right
+func (cpu *CPU) ror(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != ROR {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rol: failed fetchArg. err: %w", err)
+	}
+
+	result := arg >> 1
+	if cpu.getFlag(carryFlag) {
+		// carryフラグがある場合、最上位ビットに1を設定
+		result |= 0x80
+	}
+
+	// 最上位ビット(MSB)が立っているときにシフトしたらcarryする
+	cpu.setFlag(carryFlag, arg&0x80 != 0)
+	cpu.setFlag(zeroFlag, result == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+
+	if opcode.AddressingMode == Accumulator {
+		cpu.setA(result)
+	} else {
+		// メモリ書き込み時に追加サイクルを必要としないため
+		addr, _, err := cpu.fetchAddr(opcode.AddressingMode)
+		if err != nil {
+			return 0, fmt.Errorf("CPU: ror: failed fetch addr for writing result. err: %w", err)
+		}
+
+		if err := cpu.memory.Write(addr, result); err != nil {
+			return 0, fmt.Errorf("CPU: ror: failed write memory. addr: %x, err: %w", addr, err)
+		}
+	}
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// rti: REturn from Interrupt
+func (cpu *CPU) rti(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != RTI {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	result, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rti: failed pop stack. err: %w", err)
+	}
+
+	// http://wiki.nesdev.com/w/index.php/Status_flags: Pの 4bit 目と 5bit 目は更新しない
+	p := (result &^ bFlagMask) | (cpu.register.p & bFlagMask)
+	cpu.setP(p)
+
+	// upper -> lowerの順にpopする
+	// これはC++の参考と違ったので注意
+	upper, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rti: failed pop upper stack. err: %w", err)
+	}
+	lower, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rti: failed pop lower stack. err: %w", err)
+	}
+
+	pc := bit_helper.BytesToUint16(lower, upper)
+	cpu.setPC(pc)
+	return opcode.Cycles, nil
+}
+
+// rts Return from Subroutine
+func (cpu *CPU) rts(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != RTS {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	upper, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rts: failed pop stack. err: %w", err)
+	}
+	lower, err := cpu.popStack()
+	if err != nil {
+		return 0, fmt.Errorf("CPU: rts: failed pop stack. err: %w", err)
+	}
+
+	pc := bit_helper.BytesToUint16(lower, upper)
+
+	// JSR でスタックにプッシュされるアドレスは JSR の最後のアドレスで、RTS 側でインクリメントされる
+	pc++
+
+	cpu.setPC(pc)
+	return opcode.Cycles, nil
+}
+
+// sbc Subtract with Caryy
+func (cpu *CPU) sbc(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != SBC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	arg, additionalCycles, err := cpu.fetchArg(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: sbc: failed fetch arg. err: %w", err)
+	}
+
+	// 足し算に変換
+	// http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html#:~:text=The%20definition%20of%20the%206502,fit%20into%20a%20signed%20byte.&text=For%20each%20set%20of%20input,and%20the%20overflow%20bit%20V.
+	// A - arg - borrow == A + ~arg + carry
+
+	arg = ^arg
+
+	isCarryFlag := cpu.getFlag(carryFlag)
+
+	var carry byte
+	if isCarryFlag {
+		carry = 1
+	}
+
+	tmp := uint16(cpu.register.a) + uint16(arg) + uint16(carry)
+	result := uint8(tmp & 0xFF)
+
+	cpu.setFlag(overflowFlag, isSignedOverFlowed(cpu.register.a, arg, isCarryFlag))
+	cpu.setFlag(carryFlag, tmp > 0xFF)
+	cpu.setFlag(negativeFlag, cpu.isNegative(result))
+	cpu.setFlag(zeroFlag, result == 0)
+
+	cpu.setA(result)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) sec(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != SEC {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(carryFlag, true)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) sed(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != SED {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(decimalFlag, true)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) sei(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != SEI {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setFlag(interruptFlag, true)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// sta Store A
+func (cpu *CPU) sta(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != STA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: sta: failed fetch addr. err: %w", err)
+	}
+
+	if err := cpu.memory.Write(addr, cpu.register.a); err != nil {
+		return 0, fmt.Errorf("CPU: sta: failed write memory. err: %w", err)
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) stx(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != STX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: stx: failed fetch addr. err: %w", err)
+	}
+
+	if err := cpu.memory.Write(addr, cpu.register.x); err != nil {
+		return 0, fmt.Errorf("CPU: stx: failed write memory. err: %w", err)
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+func (cpu *CPU) sty(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != STY {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	addr, additionalCycles, err := cpu.fetchAddr(opcode.AddressingMode)
+	if err != nil {
+		return 0, fmt.Errorf("CPU: sty: failed fetch addr. err: %w", err)
+	}
+
+	if err := cpu.memory.Write(addr, cpu.register.y); err != nil {
+		return 0, fmt.Errorf("CPU: sty: failed write memory. err: %w", err)
+	}
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles + additionalCycles, nil
+}
+
+// tax Transfer A to X
+func (cpu *CPU) tax(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TAX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(zeroFlag, cpu.register.a == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.a))
+
+	cpu.setX(cpu.register.a)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) tay(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TAY {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(zeroFlag, cpu.register.a == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.a))
+
+	cpu.setY(cpu.register.a)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) tsx(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TSX {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(zeroFlag, cpu.register.sp == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.sp))
+	cpu.setX(cpu.register.sp)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) txa(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TXA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(zeroFlag, cpu.register.x == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.x))
+	cpu.setA(cpu.register.x)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) txs(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TXS {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+	cpu.setSP(cpu.register.x)
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+func (cpu *CPU) tya(opcode Opcode) (cycles uint8, err error) {
+	if opcode.Mnemonic != TYA {
+		return 0, fmt.Errorf("invalid mnemonic was specified. mnemonic: %v", opcode.Mnemonic)
+	}
+
+	cpu.setFlag(zeroFlag, cpu.register.y == 0)
+	cpu.setFlag(negativeFlag, cpu.isNegative(cpu.register.y))
+
+	cpu.setA(cpu.register.y)
+
+	cpu.incrementPC(uint16(opcode.Length))
+	return opcode.Cycles, nil
+}
+
+// TODO 拡張命令の実装
+
 func (cpu *CPU) setFlag(flag statusFlag, value bool) {
 	if value {
 		cpu.register.p |= flag.toByte() // OR
@@ -1279,6 +1603,10 @@ func (cpu *CPU) setY(y byte) {
 	cpu.register.y = y
 }
 
+func (cpu *CPU) setSP(sp byte) {
+	cpu.register.sp = sp
+}
+
 func (cpu *CPU) isNegative(b byte) bool {
 	return b&0x80 != 0
 }
@@ -1303,6 +1631,18 @@ func (cpu *CPU) popStack() (byte, error) {
 	}
 	cpu.register.sp += 1
 	return b, nil
+}
+
+// isSignedOverFlowed 符号付きの計算でオーバーフローしているかどうかを判定できる
+// 引数のnとmはuint8なのに注意すること
+func isSignedOverFlowed(n byte, m byte, carryFlag bool) bool {
+	var carry byte
+	if carryFlag {
+		carry = 1
+	}
+
+	result := n + m + carry
+	return ((m ^ result) & (n ^ result) & 0x80) == 0x80
 }
 
 /**

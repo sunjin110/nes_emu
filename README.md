@@ -12,6 +12,8 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
     - [x] PRG-ROMからPCを取得
 - [ ] CPU run
     - [ ] 命令の実装
+        - [x] デフォルト命令
+        - [ ] 拡張命令
     - [x] fetchArgの実装
     - [x] fetchAddrの実装
     - [x] popStack, pushStackの実装
