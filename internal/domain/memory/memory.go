@@ -22,7 +22,13 @@ const (
 	BreakInterruptUpperPCAddr uint16 = 0xFFFF
 )
 
-type Memory struct {
+type Memory interface {
+	Read(addr uint16) (byte, error)
+	Write(addr uint16, value byte) error
+	GetPRGROM() prgrom.PRGROM
+}
+
+type memory struct {
 	ram        ram.RAM               // RAM:ワーキングメモリ(0x0000-0x07ff) 0x0800-0x1fffはミラー
 	ppu        ppu.PPU               // PPUレジスタ(0x2000〜0x2007)　0x2008-0x3fffはミラー
 	apu        apu.APU               // APU(0x4000-0x4015)
@@ -30,8 +36,8 @@ type Memory struct {
 	prgROM     prgrom.PRGROM         // PRG-ROM(0x8000〜0xFFFF)
 }
 
-func NewMemory(prgROM prgrom.PRGROM) *Memory {
-	return &Memory{
+func NewMemory(prgROM prgrom.PRGROM) Memory {
+	return &memory{
 		ram:        *ram.NewRAM(),
 		ppu:        *ppu.NewPPU(),
 		apu:        *apu.NewAPU(),
@@ -40,7 +46,7 @@ func NewMemory(prgROM prgrom.PRGROM) *Memory {
 	}
 }
 
-func (memory *Memory) Read(addr uint16) (byte, error) {
+func (memory *memory) Read(addr uint16) (byte, error) {
 	switch {
 	case ram.IsRAMRange(addr): // RAM
 		return memory.ram.Read(addr), nil
@@ -58,7 +64,7 @@ func (memory *Memory) Read(addr uint16) (byte, error) {
 	}
 }
 
-func (memory *Memory) Write(addr uint16, value byte) error {
+func (memory *memory) Write(addr uint16, value byte) error {
 	switch {
 	case ram.IsRAMRange(addr): // RAM
 		memory.ram.Write(addr, value)
@@ -76,6 +82,6 @@ func (memory *Memory) Write(addr uint16, value byte) error {
 	return nil
 }
 
-func (memory *Memory) GetPRGROM() prgrom.PRGROM {
+func (memory *memory) GetPRGROM() prgrom.PRGROM {
 	return memory.prgROM
 }
