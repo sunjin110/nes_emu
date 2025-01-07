@@ -23,6 +23,12 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
 - [ ] メモリマップどIO
     - [x] 各モジュールにアクセスできるところまで実装した
 - [ ] PPU
+    - [x] PPUの構造の理解
+    - [ ] PPUのメモリ構造を実装
+    - [ ] PPUの内部レジスタの挙動を実装する
+    - [ ] PPUのレジスタが書き込まれた時 and 読み込まれた時の挙動を実装
+    - [ ] Goで利用するLibraryの選定
+    - [ ] 画面に実際に描画する箇所の実装
 - [ ] APU
 - [ ] コントローラー
 
@@ -30,8 +36,8 @@ https://www.notion.so/sunjin110/Go-1422a4b99be980a2b0e3c43ba6840510
 
 # 作成するもの
 - CPU: 6502ベースのもの、clock数は1.79MHz, MOS6502から不要な機能を削り、APUとDACを実装。
-- PPU: ピクチャープロセッサーユニット  
-    キャラクターROMから画像データを読んで画面上に配置する
+- PPU: ピクチャープロセッサーユニット    
+    キャラクターROMから画像データを読んで画面上に配置する  
 - ROM: 32KiB + キャラクタROM 8KiB
 - WRAM: ワーキングRAM 2KiB
 - VRAM: ビデオRAM 2KiB
@@ -71,3 +77,10 @@ PPUがキャラクターROMから画像データを読んで画面上に配置�
 (WRAMのうち0x100~0x01FFが割り当てられる)
 すなわち、スタックポインタレジスタが0xA0の場合、スタックポインタは0x01A0になる
 
+
+# GUI libraryの選定
+
+- Goの標準配下で進められている https://pkg.go.dev/golang.org/x/exp/shiny 
+- QT
+- Ebiten Engine
+- SDL2のbinding

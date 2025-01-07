@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sunjin110/nes_emu/internal/domain/memory"
+	"github.com/sunjin110/nes_emu/internal/domain/cpu/internal/memory"
 	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
 	"github.com/sunjin110/nes_emu/pkg/bit_helper"
 )
@@ -15,7 +15,9 @@ type CPU struct {
 	register Register
 }
 
-func NewCPU(memory memory.Memory, prgROM prgrom.PRGROM) (*CPU, error) {
+func NewCPU(prgROM prgrom.PRGROM) (*CPU, error) {
+	memory := memory.NewMemory(prgROM)
+
 	register, err := NewRegister(prgROM)
 	if err != nil {
 		return nil, fmt.Errorf("failed new register. err: %w", err)

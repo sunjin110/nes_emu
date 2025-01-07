@@ -652,7 +652,8 @@ func Test_CPU_Run(t *testing.T) {
 					data: tt.initialMemory,
 				}
 
-				cpu, err := NewCPU(m, m.GetPRGROM())
+				cpu, err := NewCPU(m.GetPRGROM())
+				cpu.memory = m
 				So(err, ShouldBeNil)
 
 				cpu.register = tt.initalRegs

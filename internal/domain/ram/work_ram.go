@@ -20,21 +20,21 @@ const (
 	addrRAMEnd         = 0x1FFF
 )
 
-type RAM struct {
+type WorkRAM struct {
 	data [ramSize]byte
 }
 
-func NewRAM() *RAM {
-	return &RAM{
+func NewWorkRAM() *WorkRAM {
+	return &WorkRAM{
 		data: [ramSize]byte{},
 	}
 }
 
-func (ram *RAM) Read(offset uint16) byte {
+func (ram *WorkRAM) Read(offset uint16) byte {
 	return ram.data[offset%ramSize]
 }
 
-func (ram *RAM) Write(offset uint16, data byte) {
+func (ram *WorkRAM) Write(offset uint16, data byte) {
 	ram.data[offset%ramSize] = data
 }
 
