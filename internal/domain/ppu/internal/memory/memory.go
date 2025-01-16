@@ -9,9 +9,29 @@ type Memory interface {
 	Write(addr uint16, value byte) error
 }
 
-func NewMemory() Memory {
-	return &memory{}
+func NewMemory(chrROM []byte) (Memory, error) {
+	if len(chrROM) != 0x2000 { // 8KBではない場合はエラー
+		return nil, fmt.Errorf("CHR-ROM must be 8KB. chrROM size: %x", len(chrROM))
+	}
+
+	var data0 [4096]byte
+	var data1 [4096]byte
+
+	copy(data0[:], chrROM[:0x1000])
+	copy(data1[:], chrROM[0x1000:0x2000])
+
+	return &memory{
+		patternTable0: patternTable{
+			data: data0,
+		},
+		patternTable1: patternTable{
+			data: data1,
+		},
+	}, nil
 }
+
+// TODO PPUの0x0000-0x1fffはCHRになる、ここでCHR-RAMとCHR-ROMがあるのでこれは、カートリッジの参照を直接持っちゃったほうがいいかもしれない
+// TODO PPU CHR-ROMのバンク切り替え
 
 // PPUのメモリ構成を考える
 type memory struct {
@@ -174,11 +194,11 @@ func (m *memory) Write(addr uint16, value byte) error {
 }
 
 type patternTable struct {
-	data [0x0fff + 1]byte
+	data [0x1000]byte
 }
 
 type nametable struct {
-	data [0x03bf + 1]byte
+	data [0x03c]byte
 }
 
 type attributeTable struct {
