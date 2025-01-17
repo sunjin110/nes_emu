@@ -52,7 +52,11 @@ func (memory *memory) Read(addr uint16) (byte, error) {
 	case ram.IsRAMRange(addr): // RAM
 		return memory.ram.Read(addr), nil
 	case ppu.IsPPUAddrRange(addr): // PPU
-		return memory.ppu.Read(addr), nil
+		value, err := memory.ppu.Read(addr)
+		if err != nil {
+			return 0, fmt.Errorf("failed: memory.ppu.read. err: %w", err)
+		}
+		return value, nil
 	case apu.IsAPUAddrRange(addr): // APU
 		return memory.apu.Read(addr), nil
 	case controller.IsControllerAddr(addr):
@@ -70,7 +74,9 @@ func (memory *memory) Write(addr uint16, value byte) error {
 	case ram.IsRAMRange(addr): // RAM
 		memory.ram.Write(addr, value)
 	case ppu.IsPPUAddrRange(addr): // PPU
-		memory.ppu.Write(addr, value)
+		if err := memory.ppu.Write(addr, value); err != nil {
+			return fmt.Errorf("failed write ppu. addr: %x, value: %x, err: %w", addr, value, err)
+		}
 	case apu.IsAPUAddrRange(addr): // APU
 		memory.apu.Write(addr, value)
 	case controller.IsControllerAddr(addr):
