@@ -37,10 +37,10 @@ type memory struct {
 	prgROM     prgrom.PRGROM         // PRG-ROM(0x8000〜0xFFFF)
 }
 
-func NewMemory(prgROM prgrom.PRGROM) Memory {
+func NewMemory(prgROM prgrom.PRGROM, ppu ppu.PPU) Memory {
 	return &memory{
 		ram:        *ram.NewWorkRAM(),
-		ppu:        *ppu.NewPPU(),
+		ppu:        ppu,
 		apu:        *apu.NewAPU(),
 		controller: *controller.NewController(),
 		prgROM:     prgROM,

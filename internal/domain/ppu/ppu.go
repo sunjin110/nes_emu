@@ -7,13 +7,20 @@ import (
 	"github.com/sunjin110/nes_emu/internal/domain/ppu/internal/register"
 )
 
-type PPU struct {
+//go:generate mockgen -source ./ppu.go -destination ./mock_ppu/ppu.go -package mock_ppu -typed
+type PPU interface {
+	Read(addr uint16) (byte, error)
+	Write(addr uint16, value byte) error
+	IsPPU()
+}
+
+type ppu struct {
 	internalRegister register.Register
 	memory           memory.Memory
 }
 
-func NewPPU() *PPU {
-	return &PPU{}
+func NewPPU() PPU {
+	return &ppu{}
 }
 
 const (
@@ -51,7 +58,7 @@ const (
 )
 
 // Read CPUがreadする
-func (p *PPU) Read(addr uint16) (byte, error) {
+func (p *ppu) Read(addr uint16) (byte, error) {
 	switch addr {
 	case ppuStatus:
 		value, err := p.readPPUStatus()
@@ -71,7 +78,7 @@ func (p *PPU) Read(addr uint16) (byte, error) {
 }
 
 // Write CPUがwriteする
-func (p *PPU) Write(addr uint16, value byte) error {
+func (p *ppu) Write(addr uint16, value byte) error {
 	switch addr {
 	case ppuCTRL:
 		if err := p.writePPUCtrl(value); err != nil {
@@ -108,39 +115,43 @@ func (p *PPU) Write(addr uint16, value byte) error {
 	return fmt.Errorf("undefined ppu register addr: %x. value: %x", addr, value)
 }
 
-func (p *PPU) writePPUCtrl(value byte) error {
+func (*ppu) IsPPU() {
+	// PPUのinterfaceのため
+}
+
+func (p *ppu) writePPUCtrl(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writePPUMask(value byte) error {
+func (p *ppu) writePPUMask(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writeOAMADDR(value byte) error {
+func (p *ppu) writeOAMADDR(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writeOAMData(value byte) error {
+func (p *ppu) writeOAMData(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writePPUScroll(value byte) error {
+func (p *ppu) writePPUScroll(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writePPUADDR(value byte) error {
+func (p *ppu) writePPUADDR(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) writePPUData(value byte) error {
+func (p *ppu) writePPUData(value byte) error {
 	panic("todo")
 }
 
-func (p *PPU) readPPUStatus() (byte, error) {
+func (p *ppu) readPPUStatus() (byte, error) {
 	panic("todo")
 }
 
-func (p *PPU) readPPUData() (byte, error) {
+func (p *ppu) readPPUData() (byte, error) {
 	panic("todo")
 }
 

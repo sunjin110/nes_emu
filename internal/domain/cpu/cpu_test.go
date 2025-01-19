@@ -652,7 +652,7 @@ func Test_CPU_Run(t *testing.T) {
 					data: tt.initialMemory,
 				}
 
-				cpu, err := NewCPU(m.GetPRGROM())
+				cpu, err := NewCPU(m.GetPRGROM(), nil)
 				cpu.memory = m
 				So(err, ShouldBeNil)
 

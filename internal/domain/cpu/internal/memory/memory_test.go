@@ -5,14 +5,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/sunjin110/nes_emu/internal/domain/cpu/internal/memory"
+	"github.com/sunjin110/nes_emu/internal/domain/ppu/mock_ppu"
 	"github.com/sunjin110/nes_emu/internal/domain/prgrom"
+	"go.uber.org/mock/gomock"
 )
 
 func TestMemory_ReadWrite(t *testing.T) {
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ppu := mock_ppu.NewMockPPU(ctrl)
+	ppu.EXPECT().Write(uint16(0x2000), byte(0x84)).Return(nil)
+	ppu.EXPECT().Read(uint16(0x2000)).Return(0x84, nil)
+	ppu.EXPECT().Read(uint16(0x2008)).Return(0x84, nil)
+
 	// メモリの初期化
 	prgRom := [prgrom.PRGROMSize]byte{}
 	prgRom[0] = 0x99
-	mem := memory.NewMemory(prgrom.NewFixedPRGROM(prgRom))
+	mem := memory.NewMemory(prgrom.NewFixedPRGROM(prgRom), ppu)
 
 	// RAMの書き込みと読み込み
 	addrRAM := uint16(0x0000)
@@ -60,7 +71,7 @@ func TestMemory_ReadWrite(t *testing.T) {
 
 func TestMemory_InvalidAddress(t *testing.T) {
 	// メモリの初期化
-	mem := memory.NewMemory(prgrom.NewFixedPRGROM([32 * 1024]byte{}))
+	mem := memory.NewMemory(prgrom.NewFixedPRGROM([32 * 1024]byte{}), nil)
 
 	// 無効なアドレスの読み込み
 	invalidAddr := uint16(0x8000 - 1)
