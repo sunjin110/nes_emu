@@ -4,7 +4,7 @@ go 1.23.4
 
 require (
 	github.com/smartystreets/goconvey v1.8.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.5.0
 )
 
